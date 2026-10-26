@@ -190,6 +190,8 @@ class AppDonationConfig {
     required this.upiId,
     required this.qrCodePath,
     this.razorpayKeyId = '',
+    this.cashfreeAppId = '',
+    this.cashfreeEnv = 'PROD',
     this.homes = const [],
   });
 
@@ -201,6 +203,8 @@ class AppDonationConfig {
   final String upiId;
   final String qrCodePath;
   final String razorpayKeyId;
+  final String cashfreeAppId;
+  final String cashfreeEnv;
   final List<TrustHomeItem> homes;
 
   static const List<TrustHomeItem> defaultHomes = [
@@ -256,6 +260,8 @@ class AppDonationConfig {
       upiId: m['upi_id'] as String? ?? '',
       qrCodePath: m['qr_code_path'] as String? ?? '',
       razorpayKeyId: m['razorpay_key_id'] as String? ?? '',
+      cashfreeAppId: m['cashfree_app_id'] as String? ?? '',
+      cashfreeEnv: m['cashfree_env'] as String? ?? 'PROD',
       homes: rawHomes.isNotEmpty ? rawHomes : defaultHomes,
     );
   }

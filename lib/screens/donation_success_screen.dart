@@ -1,5 +1,7 @@
+import 'package:decimal/decimal.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../core/theme/app_theme.dart';
 import '../core/widgets/app_footer.dart';
 import '../models/models.dart';
@@ -37,10 +39,51 @@ class _DonationSuccessScreenState extends State<DonationSuccessScreen>
     super.dispose();
   }
 
+  String _convertAmountToWords(Decimal amount) {
+    final numVal = amount.toDouble();
+    final intPart = numVal.floor();
+    if (intPart <= 0) return 'Rupees Zero Only';
+
+    const units = [
+      '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+      'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'
+    ];
+    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+    String numWords(int n) {
+      if (n == 0) return '';
+      if (n < 20) return units[n];
+      if (n < 100) return '${tens[n ~/ 10]} ${units[n % 10]}'.trim();
+      if (n < 1000) return '${units[n ~/ 100]} Hundred ${numWords(n % 100)}'.trim();
+      if (n < 100000) return '${numWords(n ~/ 1000)} Thousand ${numWords(n % 1000)}'.trim();
+      if (n < 10000000) return '${numWords(n ~/ 100000)} Lakh ${numWords(n % 100000)}'.trim();
+      return '${numWords(n ~/ 10000000)} Crore ${numWords(n % 10000000)}'.trim();
+    }
+
+    return 'Rupees ${numWords(intPart)} Only';
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final isPending = widget.receipt.verificationStatus == 'PENDING';
+
+    final invoiceNo = widget.receipt.voucherNumber.isNotEmpty
+        ? widget.receipt.voucherNumber
+        : widget.receipt.donationNumber;
+
+    final particularsMain = widget.receipt.purpose.isNotEmpty
+        ? widget.receipt.purpose
+        : '${widget.receipt.category} Donation';
+
+    final particularsSub = [
+      if (widget.receipt.schemeName.isNotEmpty) 'Scheme: ${widget.receipt.schemeName}',
+      if (widget.receipt.category.isNotEmpty && widget.receipt.schemeName != widget.receipt.category)
+        'Category: ${widget.receipt.category}',
+      if (widget.receipt.bankName.isNotEmpty) 'Wing: ${widget.receipt.bankName}',
+    ].join(' • ');
+
+    final qrData = 'NESAKKARAM|${widget.receipt.donationNumber}|$invoiceNo|${widget.receipt.amount}|${widget.receipt.donorPhone}';
 
     return Scaffold(
       appBar: AppBar(
@@ -54,9 +97,9 @@ class _DonationSuccessScreenState extends State<DonationSuccessScreen>
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
-            // ── Animated Success / Pending Header ───────────────────────────
+            // ── Animated Celebration Header ─────────────────────────────────
             AnimatedBuilder(
               animation: _controller,
               builder: (_, __) => FadeTransition(
@@ -65,13 +108,12 @@ class _DonationSuccessScreenState extends State<DonationSuccessScreen>
                   scale: _scaleAnim,
                   child: Column(
                     children: [
-                      // Celebration ring
                       Stack(
                         alignment: Alignment.center,
                         children: [
                           Container(
-                            width: 110,
-                            height: 110,
+                            width: 80,
+                            height: 80,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: isPending
@@ -80,8 +122,8 @@ class _DonationSuccessScreenState extends State<DonationSuccessScreen>
                             ),
                           ),
                           Container(
-                            width: 86,
-                            height: 86,
+                            width: 64,
+                            height: 64,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: isPending
@@ -91,26 +133,26 @@ class _DonationSuccessScreenState extends State<DonationSuccessScreen>
                             child: Icon(
                               isPending ? Icons.hourglass_top_rounded : Icons.check_circle_rounded,
                               color: isPending ? const Color(0xFFD97706) : const Color(0xFF059669),
-                              size: 50,
+                              size: 38,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       Text(
                         isPending ? 'Donation Submitted! 🙏' : 'Thank You! 🙏',
                         style: GoogleFonts.outfit(
-                          fontSize: 24,
+                          fontSize: 22,
                           fontWeight: FontWeight.w900,
                           color: isDark ? const Color(0xFFF9FAFB) : const Color(0xFF111827),
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 4),
                       Text(
                         widget.receipt.message,
                         textAlign: TextAlign.center,
                         style: GoogleFonts.nunito(
-                          fontSize: 13,
+                          fontSize: 12,
                           color: isDark ? const Color(0xFFD1D5DB) : const Color(0xFF4B5563),
                         ),
                       ),
@@ -120,64 +162,78 @@ class _DonationSuccessScreenState extends State<DonationSuccessScreen>
               ),
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
-            // ── Official E-Receipt Card ─────────────────────────────────────
-            Card(
-              elevation: 3,
-              shadowColor: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            // ── Official Receipt Card (Web-App Mirror Design) ────────────────
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
+                    blurRadius: 14,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // 1. Emerald Green Header (Matching Web App, Address Removed)
+                  Container(
+                    color: const Color(0xFF059669),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    child: Row(
                       children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              isPending ? 'PAYMENT ACKNOWLEDGEMENT' : 'OFFICIAL E-RECEIPT',
-                              style: GoogleFonts.outfit(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                                color: isDark ? const Color(0xFFFBBF24) : AppTheme.primaryDark,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            Text(
-                              'Nesakkaram Trust',
-                              style: GoogleFonts.outfit(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: isDark ? const Color(0xFFF9FAFB) : const Color(0xFF111827),
-                              ),
-                            ),
-                          ],
-                        ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          width: 44,
+                          height: 44,
+                          padding: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
-                            color: isPending
-                                ? (isDark ? const Color(0xFF78350F).withValues(alpha: 0.4) : const Color(0xFFFEF3C7))
-                                : (isDark ? const Color(0xFF064E3B).withValues(alpha: 0.4) : const Color(0xFFECFDF5)),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: isPending ? const Color(0xFFF59E0B) : const Color(0xFF10B981)),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                isPending ? Icons.schedule_rounded : Icons.verified_rounded,
-                                size: 14,
-                                color: isPending ? const Color(0xFFD97706) : const Color(0xFF059669),
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.1),
+                                blurRadius: 4,
                               ),
-                              const SizedBox(width: 4),
+                            ],
+                          ),
+                          child: Image.asset(
+                            'assets/images/logo.png',
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(
+                              Icons.volunteer_activism_rounded,
+                              color: Color(0xFF059669),
+                              size: 26,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                               Text(
-                                isPending ? 'PENDING VERIFICATION' : 'VERIFIED',
+                                'NESAKKARAM TRUST',
                                 style: GoogleFonts.outfit(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                isPending ? 'DONATION PAYMENT ACKNOWLEDGEMENT' : 'OFFICIAL DONATION RECEIPT',
+                                style: GoogleFonts.nunito(
+                                  color: const Color(0xFFD1FAE5),
                                   fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  color: isPending ? const Color(0xFFD97706) : const Color(0xFF059669),
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.4,
                                 ),
                               ),
                             ],
@@ -185,85 +241,407 @@ class _DonationSuccessScreenState extends State<DonationSuccessScreen>
                         ),
                       ],
                     ),
-                    const Divider(height: 24),
-                    _receiptRow(context, 'Donation Number', widget.receipt.donationNumber),
-                    _receiptRow(
-                      context,
-                      'Voucher Receipt No.',
-                      isPending ? 'Pending Staff Approval' : widget.receipt.voucherNumber,
-                    ),
-                    _receiptRow(context, 'Business Date', widget.receipt.businessDate),
-                    _receiptRow(context, 'Donor Name', widget.receipt.donorName),
-                    _receiptRow(context, 'Mobile Number', widget.receipt.donorPhone),
-                    if (widget.receipt.donorPan.isNotEmpty)
-                      _receiptRow(context, 'PAN Number', widget.receipt.donorPan),
-                    _receiptRow(context, 'Category / Purpose', widget.receipt.purpose),
-                    _receiptRow(context, 'Target Branch / Wing', widget.receipt.bankName),
-                    _receiptRow(context, 'Payment Reference (UTR)', widget.receipt.referenceNumber),
-                    const Divider(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  ),
+
+                  // 2. Receipt White Sheet Body
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Date & Invoice No
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'DATE',
+                                  style: GoogleFonts.nunito(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF94A3B8),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  widget.receipt.businessDate,
+                                  style: GoogleFonts.nunito(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  'INVOICE NO',
+                                  style: GoogleFonts.nunito(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF94A3B8),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  invoiceNo,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w900,
+                                    color: const Color(0xFF059669),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 10),
+                        const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                        const SizedBox(height: 10),
+
+                        // Received From / Donor
                         Text(
-                          'Amount Paid',
-                          style: GoogleFonts.outfit(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: isDark ? const Color(0xFFF9FAFB) : const Color(0xFF111827),
+                          'RECEIVED FROM / DONOR',
+                          style: GoogleFonts.nunito(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF94A3B8),
+                            letterSpacing: 0.5,
                           ),
                         ),
+                        const SizedBox(height: 3),
+                        Text(
+                          widget.receipt.donorName,
+                          style: GoogleFonts.outfit(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF0F172A),
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 4,
+                          children: [
+                            if (widget.receipt.donorPhone.isNotEmpty)
+                              Text(
+                                'Mobile: +91 ${widget.receipt.donorPhone}',
+                                style: GoogleFonts.nunito(fontSize: 11, color: const Color(0xFF475569)),
+                              ),
+                            if (widget.receipt.donorPan.isNotEmpty)
+                              Text(
+                                'PAN: ${widget.receipt.donorPan}',
+                                style: GoogleFonts.nunito(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF059669),
+                                ),
+                              ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 14),
+
+                        // 3. Particulars Table Header (Dark Slate #1E293B)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF064E3B).withValues(alpha: 0.4) : const Color(0xFFECFDF5),
-                            borderRadius: BorderRadius.circular(10),
+                            color: const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 26,
+                                child: Text(
+                                  'SL',
+                                  style: GoogleFonts.nunito(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  'PARTICULARS',
+                                  style: GoogleFonts.nunito(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                'AMOUNT (₹)',
+                                style: GoogleFonts.nunito(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Particulars Table Row
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: const BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(color: Color(0xFFE2E8F0)),
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 26,
+                                child: Text(
+                                  '1',
+                                  style: GoogleFonts.nunito(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: const Color(0xFF475569),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      particularsMain,
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w800,
+                                        color: const Color(0xFF059669),
+                                      ),
+                                    ),
+                                    if (particularsSub.isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        particularsSub,
+                                        style: GoogleFonts.nunito(
+                                          fontSize: 10,
+                                          color: const Color(0xFF64748B),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                '₹${widget.receipt.amount}',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: const Color(0xFF0F172A),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 6),
+
+                        // Total Cost Bar (Dark Slate #1E293B)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Total Cost',
+                                style: GoogleFonts.outfit(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              Text(
+                                '₹${widget.receipt.amount}',
+                                style: GoogleFonts.outfit(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        // 4. Amount in Words (Amber Box #FFFBEB)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFFBEB),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFFFDE68A)),
                           ),
                           child: Text(
-                            '₹${widget.receipt.amount}',
-                            style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.w900, color: const Color(0xFF059669)),
+                            'Amount in Words: ${_convertAmountToWords(widget.receipt.amount)}',
+                            style: GoogleFonts.nunito(
+                              fontSize: 10.5,
+                              color: const Color(0xFF92400E),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // 5. Three Column Footer (Payment Details | QR Code | Signatory)
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            children: [
+                              // Column 1: Payment Details
+                              Expanded(
+                                flex: 4,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'PAYMENT DETAILS',
+                                      style: GoogleFonts.nunito(
+                                        fontSize: 8,
+                                        fontWeight: FontWeight.w800,
+                                        color: const Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      isPending ? 'Pending Verification' : 'Online Payment Received',
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: isPending ? const Color(0xFFD97706) : const Color(0xFF059669),
+                                      ),
+                                    ),
+                                    if (widget.receipt.referenceNumber.isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Ref: ${widget.receipt.referenceNumber}',
+                                        style: GoogleFonts.nunito(
+                                          fontSize: 8.5,
+                                          color: const Color(0xFF64748B),
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      'Thanks for Your Support',
+                                      style: GoogleFonts.nunito(
+                                        fontSize: 8.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFFB45309),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              const SizedBox(width: 8),
+
+                              // Column 2: QR Code
+                              Expanded(
+                                flex: 3,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    QrImageView(
+                                      data: qrData,
+                                      size: 52,
+                                      version: QrVersions.auto,
+                                      padding: EdgeInsets.zero,
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      'Scan to verify',
+                                      style: GoogleFonts.nunito(
+                                        fontSize: 7.5,
+                                        color: const Color(0xFF64748B),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                              const SizedBox(width: 8),
+
+                              // Column 3: Authorized Signatory
+                              Expanded(
+                                flex: 4,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      'For: NESAKKARAM TRUST',
+                                      style: GoogleFonts.nunito(
+                                        fontSize: 8.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: const Color(0xFF334155),
+                                      ),
+                                      textAlign: TextAlign.right,
+                                    ),
+                                    const SizedBox(height: 22),
+                                    Container(
+                                      height: 1,
+                                      width: 90,
+                                      color: const Color(0xFF94A3B8),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      'Authorized Signatory',
+                                      style: GoogleFonts.nunito(
+                                        fontSize: 8,
+                                        color: const Color(0xFF64748B),
+                                      ),
+                                      textAlign: TextAlign.right,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // ── 80G Tax Exemption & Verification Notice ─────────────────────
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: isDark ? AppTheme.darkCard : (isPending ? const Color(0xFFFFFBEB) : AppTheme.primaryLight.withValues(alpha: 0.6)),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: isDark ? AppTheme.primary.withValues(alpha: 0.3) : (isPending ? const Color(0xFFFDE68A) : const Color(0xFFFCD34D))),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: BoxDecoration(
-                      color: isDark ? AppTheme.primary.withValues(alpha: 0.2) : (isPending ? const Color(0xFFFEF3C7) : AppTheme.primaryLight),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      isPending ? Icons.verified_user_outlined : Icons.shield_rounded,
-                      color: isDark ? const Color(0xFFFBBF24) : (isPending ? const Color(0xFFB45309) : AppTheme.primaryDark),
-                      size: 18,
-                    ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
+
+                  // 6. Bottom Banner (Dark Slate #1E293B)
+                  Container(
+                    color: const Color(0xFF1E293B),
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                     child: Text(
-                      isPending
-                          ? 'Your UPI transaction reference has been recorded. Once the branch accounts team verifies the credit in the bank statement, your official Section 80G tax receipt will be unlocked.'
-                          : 'Donations to Nesakkaram Trust are eligible for tax deduction under Section 80G of the Income Tax Act.',
+                      'Thank you for choosing NESAKKARAM TRUST — we appreciate your support!',
+                      textAlign: TextAlign.center,
                       style: GoogleFonts.nunito(
-                        fontSize: 11,
-                        color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
-                        height: 1.5,
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
@@ -271,7 +649,39 @@ class _DonationSuccessScreenState extends State<DonationSuccessScreen>
               ),
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+
+            // ── 80G Tax Exemption Notice ────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark ? AppTheme.darkCard : const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFBBF7D0)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.verified_user_rounded,
+                    color: Color(0xFF059669),
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Donations to Nesakkaram Trust are eligible for tax deduction under Section 80G of the Income Tax Act.',
+                      style: GoogleFonts.nunito(
+                        fontSize: 11,
+                        color: const Color(0xFF166534),
+                        height: 1.35,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 20),
 
             // ── Navigation Buttons ──────────────────────────────────────────
             Row(
@@ -303,37 +713,6 @@ class _DonationSuccessScreenState extends State<DonationSuccessScreen>
             const SizedBox(height: 10),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _receiptRow(BuildContext context, String label, String value) {
-    if (value.isEmpty) return const SizedBox.shrink();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: GoogleFonts.nunito(
-              fontSize: 12,
-              color: isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280),
-            ),
-          ),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: GoogleFonts.nunito(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: isDark ? const Color(0xFFF9FAFB) : const Color(0xFF111827),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

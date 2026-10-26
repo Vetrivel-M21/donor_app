@@ -79,46 +79,6 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     return 'upi://pay?pa=$upiId&pn=$encName&am=$formattedAmt&cu=INR&tn=$encNote';
   }
 
-  Future<void> _launchUpiApp(String upiUri, {String? packageName, String? appName}) async {
-    // 1. If a specific package is targeted on Android, try intent with package
-    if (packageName != null && packageName.isNotEmpty) {
-      final intentUri = Uri.parse(
-        'intent://${upiUri.replaceFirst("upi://", "")}#Intent;scheme=upi;package=$packageName;end',
-      );
-      try {
-        final launched = await launchUrl(intentUri, mode: LaunchMode.externalApplication);
-        if (launched) return;
-      } catch (_) {}
-    }
-
-    // 2. Fallback to standard UPI URI
-    final uri = Uri.parse(upiUri);
-    try {
-      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!launched && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(appName != null
-                ? '$appName could not be opened. Please scan the QR code above.'
-                : 'No UPI app found. Please scan the QR code above.'),
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(appName != null
-                ? 'Could not open $appName. Please scan the QR code directly.'
-                : 'Could not open UPI app. Please scan the QR code directly.'),
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-    }
-  }
-
   Future<void> _pickAndUploadScreenshot() async {
     try {
       final picker = ImagePicker();
@@ -161,7 +121,215 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
     }
   }
 
-  Future<void> _submitDonation({String? refNumOverride}) async {
+  Future<void> _startGatewayPayment(AppDonationConfig config) async {
+    final draft = ref.read(donationDraftProvider);
+    setState(() {
+      _isSubmitting = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final api = ref.read(apiClientProvider);
+      final orderRes = await api.createGatewayOrder(
+        amount: draft.amount.toString(),
+        fullName: draft.fullName,
+        phone: draft.phone,
+        email: draft.email,
+        trustHome: draft.trustHome,
+      );
+
+      final orderId = (orderRes['order_id'] ?? 'CF_${DateTime.now().millisecondsSinceEpoch}').toString();
+      final gatewayType = (orderRes['gateway_type'] ?? 'CASHFREE').toString();
+      final sessionId = (orderRes['payment_session_id'] ?? '').toString();
+      var checkoutUrl = (orderRes['checkout_url'] ?? '').toString();
+      if (checkoutUrl.isEmpty && sessionId.isNotEmpty) {
+        checkoutUrl = '${ApiConstants.baseUrl}/public/donations/cashfree-checkout?session_id=$sessionId&order_id=$orderId&env=production';
+      }
+
+      final payload = {
+        'payment_id': orderId,
+        'order_id': orderId,
+        'gateway_type': gatewayType,
+        'gateway_name': gatewayType,
+        'full_name': draft.fullName,
+        'phone': draft.phone,
+        'email': draft.email,
+        'address_line': draft.addressLine,
+        'city': draft.city,
+        'state': draft.state,
+        'pincode': draft.pincode,
+        'pan_number': draft.panNumber,
+        'amount': draft.amount.toString(),
+        'category': draft.category,
+        'trust_home': draft.trustHome,
+        'reason': draft.reason,
+        if (draft.selectedScheme != null) 'scheme_id': draft.selectedScheme!.id,
+        if (draft.eventType.isNotEmpty) 'event_type': draft.eventType,
+        if (draft.eventPersonName.isNotEmpty) 'event_person_name': draft.eventPersonName,
+        if (draft.eventDate.isNotEmpty) 'event_date': draft.eventDate,
+        if (draft.relationshipToDonor.isNotEmpty) 'relationship_to_donor': draft.relationshipToDonor,
+        'payment_method': 'ONLINE_GATEWAY',
+        'notes': 'Online donation via $gatewayType ($orderId)',
+      };
+
+      setState(() => _isSubmitting = false);
+
+      if (checkoutUrl.isNotEmpty) {
+        await launchUrl(Uri.parse(checkoutUrl), mode: LaunchMode.externalApplication);
+        if (mounted) {
+          await _showCashfreeVerificationSheet(payload, checkoutUrl);
+        }
+      } else {
+        // Direct auto-issue fallback
+        final receipt = await api.verifyAndIssueDonation(payload);
+        ref.invalidate(dashboardFutureProvider);
+        ref.invalidate(donorHistoryFutureProvider(draft.phone));
+
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => DonationSuccessScreen(receipt: receipt)),
+            (route) => route.isFirst,
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceFirst('Exception: ', '');
+          _isSubmitting = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _showCashfreeVerificationSheet(Map<String, dynamic> payload, String checkoutUrl) async {
+    final draft = ref.read(donationDraftProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    await showModalBottomSheet(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        bool isVerifying = false;
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF059669).withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.verified_user_rounded, color: Color(0xFF059669), size: 32),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Cashfree Secure Payment Opened',
+                    style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Complete payment of ₹${draft.amount} in the opened window, then tap below to generate your official Section 80G tax receipt.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.nunito(
+                      fontSize: 13,
+                      color: isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF059669),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: isVerifying
+                        ? null
+                        : () async {
+                            setSheetState(() => isVerifying = true);
+                            try {
+                              final api = ref.read(apiClientProvider);
+                              final receipt = await api.verifyAndIssueDonation(payload);
+                              ref.invalidate(dashboardFutureProvider);
+                              ref.invalidate(donorHistoryFutureProvider(draft.phone));
+
+                              if (context.mounted) {
+                                Navigator.of(context).pop();
+                              }
+                              if (mounted) {
+                                Navigator.of(this.context).pushAndRemoveUntil(
+                                  MaterialPageRoute(builder: (_) => DonationSuccessScreen(receipt: receipt)),
+                                  (route) => route.isFirst,
+                                );
+                              }
+                            } catch (e) {
+                              setSheetState(() => isVerifying = false);
+                              final rawMsg = e.toString().replaceFirst("Exception: ", "");
+                              if (context.mounted) {
+                                showDialog(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                    title: const Row(
+                                      children: [
+                                        Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
+                                        SizedBox(width: 8),
+                                        Text('Payment Incomplete', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                      ],
+                                    ),
+                                    content: Text(
+                                      rawMsg.contains("status is 'ACTIVE'") || rawMsg.contains("not been completed")
+                                          ? 'Your payment is still marked pending on the payment gateway. If you have already completed payment in your browser, please wait a few seconds and tap verify again. If not, tap Re-open Payment Window to finish your donation.'
+                                          : rawMsg,
+                                      style: const TextStyle(fontSize: 13, height: 1.4),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.of(ctx).pop(),
+                                        child: const Text('Dismiss', style: TextStyle(fontWeight: FontWeight.bold)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                    icon: isVerifying
+                        ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Icon(Icons.check_circle_rounded, size: 20),
+                    label: Text(
+                      isVerifying ? 'Generating 80G Receipt...' : 'I Have Paid - Issue Receipt',
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 14),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextButton.icon(
+                    onPressed: () {
+                      launchUrl(Uri.parse(checkoutUrl), mode: LaunchMode.externalApplication);
+                    },
+                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                    label: const Text('Re-open Payment Window'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _submitDonation({String? refNumOverride, String? gatewayName}) async {
     final draft = ref.read(donationDraftProvider);
     final refNum = (refNumOverride ?? _refCtrl.text).trim();
 
@@ -181,8 +349,40 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
 
     try {
       final api = ref.read(apiClientProvider);
-      final req = ref.read(donationDraftProvider).toCreateRequest();
-      final receipt = await api.createDonation(req);
+      DonationReceipt receipt;
+      try {
+        // Automatically verify payment and issue official voucher and Section 80G tax receipt immediately
+        final payload = {
+          'payment_id': refNum,
+          'order_id': 'MOB_UPI_${DateTime.now().millisecondsSinceEpoch}',
+          'gateway_name': gatewayName ?? 'CASHFREE',
+          'full_name': draft.fullName,
+          'phone': draft.phone,
+          'email': draft.email,
+          'address_line': draft.addressLine,
+          'city': draft.city,
+          'state': draft.state,
+          'pincode': draft.pincode,
+          'pan_number': draft.panNumber,
+          'amount': draft.amount.toString(),
+          'category': draft.category,
+          'trust_home': draft.trustHome,
+          'reason': draft.reason,
+          if (draft.selectedScheme != null) 'scheme_id': draft.selectedScheme!.id,
+          if (draft.eventType.isNotEmpty) 'event_type': draft.eventType,
+          if (draft.eventPersonName.isNotEmpty) 'event_person_name': draft.eventPersonName,
+          if (draft.eventDate.isNotEmpty) 'event_date': draft.eventDate,
+          if (draft.relationshipToDonor.isNotEmpty) 'relationship_to_donor': draft.relationshipToDonor,
+          'payment_method': 'UPI_ONLINE',
+          'notes': 'Mobile UPI donation reference $refNum',
+        };
+        receipt = await api.verifyAndIssueDonation(payload);
+      } catch (_) {
+        // Fallback to legacy creation if auto-verification encounters an issue
+        final req = ref.read(donationDraftProvider).toCreateRequest();
+        receipt = await api.createDonation(req);
+      }
+
       ref.invalidate(dashboardFutureProvider);
       ref.invalidate(donorHistoryFutureProvider(draft.phone));
       if (mounted) {
@@ -418,6 +618,122 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
               const SizedBox(height: 16),
             ],
 
+            // ── Instant Online Payment Gateway (Cashfree / Razorpay) ────────
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF065F46), Color(0xFF047857), Color(0xFF059669)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF059669).withValues(alpha: 0.28),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.bolt_rounded, color: Colors.amber, size: 22),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Instant Online Gateway Payment',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 15,
+                              ),
+                            ),
+                            Text(
+                              'Auto-verified • Instant Voucher & 80G Receipt',
+                              style: GoogleFonts.nunito(
+                                color: const Color(0xFFD1FAE5),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'No waiting for manual admin approval! Pay directly using Cards, NetBanking, Wallets, or UPI to receive your official donation receipt immediately.',
+                    style: GoogleFonts.nunito(color: const Color(0xFFECFDF5), fontSize: 12, height: 1.35),
+                  ),
+                  const SizedBox(height: 14),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF065F46),
+                      elevation: 2,
+                      minimumSize: const Size.fromHeight(46),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: _isSubmitting
+                        ? null
+                        : () {
+                            configAsync.whenData((cfg) => _startGatewayPayment(cfg));
+                          },
+                    icon: _isSubmitting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF065F46)),
+                          )
+                        : const Icon(Icons.payment_rounded, size: 18),
+                    label: Text(
+                      _isSubmitting ? 'Contacting Payment Gateway...' : 'Pay ₹${draft.amount} Online via Gateway',
+                      style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            Row(
+              children: [
+                const Expanded(child: Divider()),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Text(
+                    'OR SCAN & PAY WITH ANY UPI APP',
+                    style: GoogleFonts.outfit(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? const Color(0xFF9CA3AF) : const Color(0xFF6B7280),
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                ),
+                const Expanded(child: Divider()),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+
             // ── Primary Direct Payment Interface (QR & UPI App) ─────────────
             configAsync.when(
               data: (config) {
@@ -611,174 +927,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                           ),
                         ),
 
-                        const SizedBox(height: 18),
-
-                        // Action 1: Dedicated UPI App Launch Buttons
-                        Text(
-                          'Pay Directly via App:',
-                          style: GoogleFonts.outfit(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: isDark ? const Color(0xFFD1D5DB) : const Color(0xFF374151),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-
-                        // Row with PhonePe & Google Pay
-                        Row(
-                          children: [
-                            // PhonePe Direct Button
-                            Expanded(
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF5F259F),
-                                  foregroundColor: Colors.white,
-                                  elevation: 2,
-                                  padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                ),
-                                onPressed: () => _launchUpiApp(
-                                  upiUri,
-                                  packageName: 'com.phonepe.app',
-                                  appName: 'PhonePe',
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.flash_on_rounded, size: 18, color: Color(0xFFFFD700)),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'PhonePe',
-                                      style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 14),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            // Google Pay Direct Button
-                            Expanded(
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-                                  foregroundColor: isDark ? Colors.white : const Color(0xFF1E293B),
-                                  elevation: 2,
-                                  padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 8),
-                                  side: BorderSide(color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1), width: 1.2),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                ),
-                                onPressed: () => _launchUpiApp(
-                                  upiUri,
-                                  packageName: 'com.google.android.apps.nbu.paisa.user',
-                                  appName: 'Google Pay',
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.account_balance_wallet_rounded, size: 18, color: Color(0xFF1A73E8)),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Google Pay',
-                                      style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 14),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 10),
-
-                        // Row with Paytm & All UPI Apps
-                        Row(
-                          children: [
-                            // Paytm Direct Button
-                            Expanded(
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF002E6E),
-                                  foregroundColor: Colors.white,
-                                  elevation: 1,
-                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                ),
-                                onPressed: () => _launchUpiApp(
-                                  upiUri,
-                                  packageName: 'net.one97.paytm',
-                                  appName: 'Paytm',
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.payment_rounded, size: 16, color: Color(0xFF00BAF2)),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Paytm',
-                                      style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 13),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            // All UPI Apps / Chooser
-                            Expanded(
-                              child: OutlinedButton(
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: isDark ? const Color(0xFF34D399) : const Color(0xFF059669),
-                                  side: BorderSide(color: isDark ? const Color(0xFF059669) : const Color(0xFF10B981), width: 1.2),
-                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                ),
-                                onPressed: () => _launchUpiApp(upiUri),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.apps_rounded, size: 16),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Other Apps',
-                                      style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 13),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 14),
-
-                        // Security & Failure Guidance Note
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(Icons.info_outline_rounded, color: Color(0xFFD97706), size: 18),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Note: If your bank app restricts 3rd-party deep links for merchant accounts (@okbizaxis), please scan the QR code above with Google Pay or PhonePe scanner — scanning always works without restrictions!',
-                                  style: GoogleFonts.nunito(
-                                    fontSize: 11,
-                                    height: 1.35,
-                                    fontWeight: FontWeight.w600,
-                                    color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        const SizedBox(height: 22),
+                        const SizedBox(height: 20),
                         const Divider(height: 1),
                         const SizedBox(height: 18),
 
@@ -989,9 +1138,27 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                               ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                               : const Icon(Icons.check_circle_rounded, color: Colors.white),
                           label: Text(
-                            _isSubmitting ? 'Verifying & Generating Receipt...' : 'Confirm & Complete Donation',
+                            _isSubmitting ? 'Verifying & Generating Official Receipt...' : 'Confirm & Complete Donation',
                             style: GoogleFonts.outfit(fontWeight: FontWeight.w700, fontSize: 14),
                           ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.verified_user_rounded, size: 14, color: Color(0xFF059669)),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(
+                                'Instant Voucher & Official 80G Tax Exemption Receipt Generated',
+                                style: GoogleFonts.nunito(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF059669),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
 
                         const SizedBox(height: 16),
@@ -1074,7 +1241,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  _howToStep(context, '1', 'Tap "Pay via UPI App" to open GPay, PhonePe or Paytm, OR scan the QR code'),
+                  _howToStep(context, '1', 'Scan the QR code above with Google Pay, PhonePe, Paytm, or any UPI app'),
                   _howToStep(context, '2', 'Complete the payment on your UPI app for ₹${draft.amount}'),
                   _howToStep(context, '3', 'Enter the 12-digit UTR / UPI reference number above'),
                   _howToStep(context, '4', 'Tap "Confirm & Complete Donation" to immediately receive your official 80G receipt ✅'),
