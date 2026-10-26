@@ -7,6 +7,7 @@ import '../core/theme/app_theme.dart';
 import '../core/widgets/app_footer.dart';
 import '../models/models.dart';
 import '../providers/donor_portal_providers.dart';
+import 'receipt_view_screen.dart';
 
 class DonationHistoryScreen extends ConsumerStatefulWidget {
   const DonationHistoryScreen({super.key, this.phone});
@@ -369,7 +370,7 @@ class _DonationHistoryScreenState extends ConsumerState<DonationHistoryScreen> {
                             ),
                             const SizedBox(height: 12),
 
-                            ...donations.asMap().entries.map((entry) => _buildDonationItem(context, entry.value, entry.key == 0)),
+                            ...donations.asMap().entries.map((entry) => _buildDonationItem(context, donor, entry.value, entry.key == 0)),
                           ],
                         );
                       },
@@ -393,13 +394,14 @@ class _DonationHistoryScreenState extends ConsumerState<DonationHistoryScreen> {
     );
   }
 
-  Widget _buildDonationItem(BuildContext context, PastDonationItem d, bool isLatest) {
+  Widget _buildDonationItem(BuildContext context, DonorProfile? donor, PastDonationItem d, bool isLatest) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final catColor = _categoryColor(d.category);
     final catIcon = _categoryIcon(d.category);
+    final isVerified = d.verificationStatus == 'VERIFIED';
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: isDark ? AppTheme.darkCard : Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -408,8 +410,14 @@ class _DonationHistoryScreenState extends ConsumerState<DonationHistoryScreen> {
             ? [BoxShadow(color: catColor.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 2))]
             : null,
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: isVerified ? () => _openReceipt(context, d, donor) : null,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -566,12 +574,91 @@ class _DonationHistoryScreenState extends ConsumerState<DonationHistoryScreen> {
                         style: GoogleFonts.nunito(fontSize: 9.5, color: const Color(0xFFD97706), fontStyle: FontStyle.italic),
                       ),
                     ),
+                  // ── Official Receipt Action Button ──────────────────────
+                  if (isVerified) ...[
+                    const SizedBox(height: 10),
+                    Divider(height: 1, color: isDark ? AppTheme.darkBorder : const Color(0xFFE5E7EB)),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.verified_rounded, size: 14, color: Color(0xFF059669)),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Official Receipt Available',
+                              style: GoogleFonts.nunito(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: isDark ? const Color(0xFF34D399) : const Color(0xFF059669),
+                              ),
+                            ),
+                          ],
+                        ),
+                        InkWell(
+                          onTap: () => _openReceipt(context, d, donor),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF059669).withValues(alpha: isDark ? 0.25 : 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFF059669).withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.receipt_long_rounded, size: 14, color: Color(0xFF059669)),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'View / Download',
+                                  style: GoogleFonts.outfit(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 11.5,
+                                    color: isDark ? const Color(0xFF34D399) : const Color(0xFF059669),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
           ],
         ),
       ),
+    ),
+  ),
+);
+  }
+
+  void _openReceipt(BuildContext context, PastDonationItem d, DonorProfile? donor) {
+    final receipt = DonationReceipt(
+      donationId: d.id,
+      donationNumber: d.donationNumber,
+      voucherNumber: d.donationNumber,
+      donorName: (donor != null && donor.fullName.trim().isNotEmpty) ? donor.fullName : 'Valued Donor',
+      donorPhone: donor?.phone ?? '',
+      donorPan: donor?.panNumber ?? '',
+      amount: d.amount,
+      category: d.category,
+      purpose: d.purpose.isNotEmpty ? d.purpose : '${d.category} Donation',
+      schemeName: d.schemeName,
+      businessDate: d.businessDate,
+      bankName: 'Nesakkaram General Wing',
+      accountName: 'Nesakkaram Trust',
+      referenceNumber: d.upiReferenceNumber.isNotEmpty ? d.upiReferenceNumber : d.paymentGatewayPaymentId,
+      verificationStatus: d.verificationStatus,
+      message: 'Official Donation Receipt',
+    );
+
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ReceiptViewScreen(receipt: receipt)),
     );
   }
 }
