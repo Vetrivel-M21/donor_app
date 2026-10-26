@@ -649,37 +649,7 @@ class _DonationSuccessScreenState extends State<DonationSuccessScreen>
               ),
             ),
 
-            const SizedBox(height: 16),
 
-            // ── 80G Tax Exemption Notice ────────────────────────────────────
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: isDark ? AppTheme.darkCard : const Color(0xFFF0FDF4),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFBBF7D0)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.verified_user_rounded,
-                    color: Color(0xFF059669),
-                    size: 18,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Donations to Nesakkaram Trust are eligible for tax deduction under Section 80G of the Income Tax Act.',
-                      style: GoogleFonts.nunito(
-                        fontSize: 11,
-                        color: const Color(0xFF166534),
-                        height: 1.35,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
 
             const SizedBox(height: 20),
 

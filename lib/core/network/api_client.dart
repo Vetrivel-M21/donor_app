@@ -221,7 +221,7 @@ class ApiClient {
     }
   }
 
-  /// Automatically verifies gateway payment and issues official Section 80G tax receipt
+  /// Automatically verifies gateway payment and issues official donation receipt
   /// without requiring manual staff approval
   Future<DonationReceipt> verifyAndIssueDonation(Map<String, dynamic> payload) async {
     try {

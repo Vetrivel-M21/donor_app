@@ -532,7 +532,7 @@ class _DonationHistoryScreenState extends ConsumerState<DonationHistoryScreen> {
                                 border: Border.all(color: const Color(0xFF10B981)),
                               ),
                               child: Text(
-                                '✓ VERIFIED 80G',
+                                '✓ VERIFIED',
                                 style: GoogleFonts.nunito(
                                   fontSize: 9,
                                   fontWeight: FontWeight.w800,

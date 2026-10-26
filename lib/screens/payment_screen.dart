@@ -238,7 +238,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Complete payment of ₹${draft.amount} in the opened window, then tap below to generate your official Section 80G tax receipt.',
+                    'Complete payment of ₹${draft.amount} in the opened window, then tap below to generate your official donation receipt.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.nunito(
                       fontSize: 13,
@@ -308,7 +308,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                         ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                         : const Icon(Icons.check_circle_rounded, size: 20),
                     label: Text(
-                      isVerifying ? 'Generating 80G Receipt...' : 'I Have Paid - Issue Receipt',
+                      isVerifying ? 'Generating Receipt...' : 'I Have Paid - Issue Receipt',
                       style: GoogleFonts.outfit(fontWeight: FontWeight.w800, fontSize: 14),
                     ),
                   ),
@@ -351,7 +351,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
       final api = ref.read(apiClientProvider);
       DonationReceipt receipt;
       try {
-        // Automatically verify payment and issue official voucher and Section 80G tax receipt immediately
+        // Automatically verify payment and issue official voucher and donation receipt immediately
         final payload = {
           'payment_id': refNum,
           'order_id': 'MOB_UPI_${DateTime.now().millisecondsSinceEpoch}',
@@ -664,7 +664,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                               ),
                             ),
                             Text(
-                              'Auto-verified • Instant Voucher & 80G Receipt',
+                              'Auto-verified • Instant Voucher & Receipt',
                               style: GoogleFonts.nunito(
                                 color: const Color(0xFFD1FAE5),
                                 fontSize: 11,
@@ -1150,7 +1150,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                             const SizedBox(width: 4),
                             Flexible(
                               child: Text(
-                                'Instant Voucher & Official 80G Tax Exemption Receipt Generated',
+                                'Instant Voucher & Official Donation Receipt Generated',
                                 style: GoogleFonts.nunito(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
@@ -1244,7 +1244,7 @@ class _PaymentScreenState extends ConsumerState<PaymentScreen> {
                   _howToStep(context, '1', 'Scan the QR code above with Google Pay, PhonePe, Paytm, or any UPI app'),
                   _howToStep(context, '2', 'Complete the payment on your UPI app for ₹${draft.amount}'),
                   _howToStep(context, '3', 'Enter the 12-digit UTR / UPI reference number above'),
-                  _howToStep(context, '4', 'Tap "Confirm & Complete Donation" to immediately receive your official 80G receipt ✅'),
+                  _howToStep(context, '4', 'Tap "Confirm & Complete Donation" to immediately receive your official receipt ✅'),
                 ],
               ),
             ),

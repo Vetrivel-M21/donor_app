@@ -155,7 +155,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                               const Icon(Icons.verified_rounded, color: Color(0xFFFBBF24), size: 14),
                               const SizedBox(width: 6),
                               Text(
-                                '80G Tax Exemption Eligible',
+                                'Official Donation Receipt',
                                 style: GoogleFonts.nunito(
                                   color: const Color(0xFFFBBF24),
                                   fontSize: 12,

@@ -9,7 +9,7 @@ void main() {
     const mockDashboard = PublicDashboard(
       trustName: 'Sri Agathiyar Trust',
       tagline: 'Selfless Service',
-      taxExemption: '80G Certified',
+      taxExemption: 'Official Receipt',
       activeSchemes: 4,
       totalDonors: 120,
       totalDonations: 350,

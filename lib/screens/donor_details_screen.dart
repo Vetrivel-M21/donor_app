@@ -142,7 +142,7 @@ class _DonorDetailsScreenState extends ConsumerState<DonorDetailsScreen> {
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Your details are used to issue an official 80G tax exemption donation receipt.',
+                          'Your details are used to issue an official donation receipt.',
                           style: GoogleFonts.nunito(
                             fontSize: 12,
                             color: isDark ? const Color(0xFFFDE68A) : const Color(0xFF92400E),
@@ -244,8 +244,8 @@ class _DonorDetailsScreenState extends ConsumerState<DonorDetailsScreen> {
 
                 const SizedBox(height: 24),
 
-                // ── Section: Tax Details ────────────────────────────────────
-                _sectionHeader(context, 'Tax Details', Icons.shield_outlined),
+                // ── Section: Identification Details ─────────────────────────
+                _sectionHeader(context, 'Identification Details', Icons.badge_outlined),
                 const SizedBox(height: 12),
 
                 Row(
@@ -266,7 +266,7 @@ class _DonorDetailsScreenState extends ConsumerState<DonorDetailsScreen> {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        'For 80G Benefit',
+                        'Optional',
                         style: GoogleFonts.nunito(
                           color: isDark ? const Color(0xFFFBBF24) : AppTheme.primaryDark,
                           fontSize: 10,
@@ -312,7 +312,7 @@ class _DonorDetailsScreenState extends ConsumerState<DonorDetailsScreen> {
                       child: const Icon(Icons.home_rounded, color: Color(0xFF2563EB), size: 18),
                     ),
                     title: Text(
-                      'Postal Address (Optional for 80G)',
+                      'Postal Address (Optional)',
                       style: GoogleFonts.nunito(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,

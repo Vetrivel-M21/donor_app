@@ -30,7 +30,7 @@ class PublicDashboard {
     return PublicDashboard(
       trustName: m['trust_name'] as String? ?? 'Nesakkaram Trust',
       tagline: m['tagline'] as String? ?? 'Selfless Service & Annadhanam for All',
-      taxExemption: m['tax_exemption'] as String? ?? '80G Tax Exemption Certificate Available',
+      taxExemption: m['tax_exemption'] as String? ?? 'Official Trust Receipt Issued',
       activeSchemes: (m['active_schemes'] as num?)?.toInt() ?? 0,
       totalDonors: (m['total_donors'] as num?)?.toInt() ?? 0,
       totalDonations: (m['total_donations'] as num?)?.toInt() ?? 0,
