@@ -8,12 +8,29 @@ import '../models/models.dart';
 import '../providers/donor_portal_providers.dart';
 import 'donor_details_screen.dart';
 import 'donation_history_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../core/services/app_update_service.dart';
 
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        AppUpdateService.checkUpdate(context);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final dashAsync = ref.watch(dashboardFutureProvider);
 
     return Scaffold(
@@ -46,6 +63,14 @@ class DashboardScreen extends ConsumerWidget {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Contact Trust',
+            icon: Icon(
+              Icons.support_agent_rounded,
+              color: Theme.of(context).brightness == Brightness.dark ? Colors.white : AppTheme.primary,
+            ),
+            onPressed: () => _showContactBottomSheet(context),
+          ),
           IconButton(
             tooltip: 'My Donations',
             icon: Icon(
@@ -91,7 +116,11 @@ class DashboardScreen extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: _buildOccasionsSection(context, dashAsync),
               ),
-              const SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: _buildContactSection(context),
+              ),
+              const SizedBox(height: 12),
               const AppFooter(),
               const SizedBox(height: 20),
             ],
@@ -939,6 +968,260 @@ class DashboardScreen extends ConsumerWidget {
       },
       loading: () => const SizedBox.shrink(),
       error: (_, __) => const SizedBox.shrink(),
+    );
+  }
+
+  static const String _contactPhone = '7868043145';
+  static const String _contactPhoneDisplay = '+91 78680 43145';
+  static const String _contactEmail = 'nesakkarammd@gmail.com';
+
+  static Future<void> _makeCall() async {
+    final uri = Uri.parse('tel:+91$_contactPhone');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  static Future<void> _sendEmail() async {
+    final uri = Uri.parse('mailto:$_contactEmail');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Widget _buildContactSection(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.support_agent_rounded, color: AppTheme.primary, size: 22),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Contact & Support',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                        color: isDark ? Colors.white : const Color(0xFF111827),
+                      ),
+                    ),
+                    Text(
+                      'Direct helpline for donors & visitors',
+                      style: GoogleFonts.nunito(
+                        fontSize: 12,
+                        color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Divider(height: 1),
+          const SizedBox(height: 14),
+          InkWell(
+            onTap: _makeCall,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF064E3B).withValues(alpha: 0.25) : const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark ? const Color(0xFF059669).withValues(alpha: 0.4) : const Color(0xFFBBF7D0),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.phone_in_talk_rounded, color: Color(0xFF059669), size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Trust Helpline',
+                          style: GoogleFonts.nunito(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? const Color(0xFFA7F3D0) : const Color(0xFF166534),
+                          ),
+                        ),
+                        Text(
+                          _contactPhoneDisplay,
+                          style: GoogleFonts.outfit(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: isDark ? Colors.white : const Color(0xFF065F46),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF059669),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Call',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          InkWell(
+            onTap: _sendEmail,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF1E3A8A).withValues(alpha: 0.25) : const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isDark ? const Color(0xFF3B82F6).withValues(alpha: 0.4) : const Color(0xFFBFDBFE),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.email_outlined, color: Color(0xFF2563EB), size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Official Email',
+                          style: GoogleFonts.nunito(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? const Color(0xFFBFDBFE) : const Color(0xFF1E40AF),
+                          ),
+                        ),
+                        Text(
+                          _contactEmail,
+                          style: GoogleFonts.outfit(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: isDark ? Colors.white : const Color(0xFF1E3A8A),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2563EB),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Email',
+                      style: GoogleFonts.outfit(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showContactBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Nesakkaram Charitable Trust',
+                style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Reach out directly for any queries or guidance',
+                style: GoogleFonts.nunito(fontSize: 13, color: Colors.grey),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFD1FAE5),
+                  child: Icon(Icons.phone_rounded, color: Color(0xFF059669)),
+                ),
+                title: Text(_contactPhoneDisplay, style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+                subtitle: const Text('Helpline / Trust Phone'),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _makeCall();
+                },
+              ),
+              const Divider(),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Color(0xFFDBEAFE),
+                  child: Icon(Icons.email_rounded, color: Color(0xFF2563EB)),
+                ),
+                title: Text(_contactEmail, style: GoogleFonts.outfit(fontWeight: FontWeight.w700)),
+                subtitle: const Text('Official Trust Email'),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _sendEmail();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

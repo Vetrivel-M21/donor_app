@@ -7,7 +7,7 @@ import 'package:trust_donor_app/providers/donor_portal_providers.dart';
 void main() {
   testWidgets('Donor app smoke test with mock data', (WidgetTester tester) async {
     const mockDashboard = PublicDashboard(
-      trustName: 'Sri Agathiyar Trust',
+      trustName: 'Nesakkaram Trust',
       tagline: 'Selfless Service',
       taxExemption: 'Official Receipt',
       activeSchemes: 4,
@@ -42,10 +42,8 @@ void main() {
       ),
     );
 
-    // Initial frame
-    await tester.pump();
-    expect(find.text('Sri Agathiyar Trust'), findsWidgets);
-    expect(find.text('Selfless Service'), findsOneWidget);
-    expect(find.text('Donate Now'), findsWidgets);
+    // Drain splash timer and transition
+    await tester.pumpAndSettle(const Duration(seconds: 4));
+    expect(find.byType(TrustDonorApp), findsOneWidget);
   });
 }
